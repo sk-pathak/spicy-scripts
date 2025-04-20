@@ -1,0 +1,139 @@
+module SimpleHTTP;
+import spicy;
+
+const Token = /[^ \t\r\n]+/;
+const URI = /[^ \t\r\n]+/;
+const NewLine = /\r?\n/;
+const RestOfLine = /[^\r\n]*/;
+const Integer = /[0-9]+/;
+const WhiteSpace = /[ \t]+/;
+const OptionalWhiteSpace = /[ \t]*/;
+
+public type Requests = unit {
+    %port = 80/tcp &originator;
+    : Request[];
+};
+
+type Request = unit {
+    request: RequestLine;
+    on request {
+        self.has_body = (self.request.method == b"POST");
+    }
+    
+    headers: Header[];
+    on headers {
+        for (h in self.headers) {
+            if (h?.content_length) {
+                self.content_length = h.content_length;
+                self.has_content_length = True;
+                break;
+            }
+        }
+    }
+    
+    : NewLine;
+    
+    body: Body(self.content_length) if (self.has_body && self.has_content_length);
+    
+    var has_body: bool = False;
+    var has_content_length: bool = False;
+    var content_length: uint64 = 0;
+    
+    on %done {
+        print "method= %s, uri= %s" % (self.request.method, self.request.uri);
+    }
+};
+
+type RequestLine = unit {
+    method: Token;
+    on method {
+        if (self.method != b"GET" && self.method != b"POST")
+            self.method = b"GET";
+    }
+    : WhiteSpace;
+    uri: URI;
+    : WhiteSpace;
+    version: Version;
+    : NewLine;
+};
+
+type Version = unit {
+    : /HTTP\//;
+    number: /[0-9]+\.[0-9]*/;
+};
+
+type Header = unit {
+    name: /[^:\r\n]+/;
+    : /:/;
+    : OptionalWhiteSpace;
+    value: RestOfLine;
+    : NewLine;
+    
+    var content_length: uint64 &optional;
+    
+    on value {
+        if (self.name.upper() == b"CONTENT-LENGTH")
+            self.content_length = self.value.strip().to_uint();
+    }
+    
+    on %done {
+        print "%s: %s" % (self.name, self.value);
+    }
+};
+
+type Body = unit(length: uint64) {
+    content: bytes &size=length;
+    
+    on %init {
+        print "Processing HTTP request body with length: %d"% length;
+    }
+    
+    on %done {
+        print "Body content: %s" % self.content;
+    }
+};
+
+public type Responses = unit {
+    %port = 80/tcp &responder;
+    : Response[];
+};
+
+type Response = unit {
+    status_line: StatusLine;
+    on status_line {
+        self.has_body = (self.status_line.status >= 200);
+        print "Response code: %d, Message: %s" % (self.status_line.status, self.status_line.reason);
+    }
+    
+    headers: Header[];
+    
+    on headers {
+        for (h in self.headers) {
+            if (h?.content_length) {
+                self.content_length = h.content_length;
+                self.has_content_length = True;
+                break;
+            }
+        }
+    }
+    
+    end_of_headers: NewLine;
+    
+    body: bytes &size=self.content_length if (self.has_body && self.has_content_length);
+    on body {
+        print "Response body: %s" % self.body;
+    }
+    
+    var has_body: bool = True;
+    var has_content_length: bool = False;
+    var content_length: uint64 = 0;
+};
+
+type StatusLine = unit {
+    version: Version;
+    : WhiteSpace;
+    status: Integer &convert=$$.to_uint();
+    : OptionalWhiteSpace;
+    reason: RestOfLine;
+    : NewLine;
+};
