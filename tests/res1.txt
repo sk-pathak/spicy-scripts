@@ -1,0 +1,21 @@
+HTTP/1.1 200 OK
+Transfer-Encoding: chunked
+Content-Type: text/html
+
+15
+<html><body><h1>Hello
+13
+, this is a chunked
+E
+ response</h1>
+1B
+<p>Testing chunked encoding
+4
+</p>
+7
+</body>
+7
+</html>
+0
+
+

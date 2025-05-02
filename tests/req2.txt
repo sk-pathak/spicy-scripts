@@ -1,0 +1,14 @@
+POST /submit HTTP/1.1
+Host: example.com
+Transfer-Encoding: chunked
+Trailer: X-Checksum, X-Info
+
+9
+123456789
+9
+abcdefghi
+0
+X-Checksum: 43b5196f57e4
+X-Info: Sent by Spicy test client
+
+

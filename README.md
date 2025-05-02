@@ -10,9 +10,9 @@ This repo contains basic custom networking protocol parsers written in spicy (ht
 
 ## Run the script
 - Clone the repo
-- Create an HTTP request in request.txt & an HTTP response in response.txt
+- Create a custom HTTP request & response (or use example tests)
 - From the root directory, run
 ```
-spicy-driver -p SimpleHTTP::Requests http.spicy < request.txt
-spicy-driver -p SimpleHTTP::Responses http.spicy < response.txt
+spicy-driver -p SimpleHTTP::Requests http.spicy < tests/req1.txt
+spicy-driver -p SimpleHTTP::Responses http.spicy < tests/res1.txt
 ```

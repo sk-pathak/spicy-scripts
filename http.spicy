@@ -26,17 +26,21 @@ type Request = unit {
             if (h?.content_length) {
                 self.content_length = h.content_length;
                 self.has_content_length = True;
-                break;
+            }
+            if (h?.is_chunked) {
+                self.is_chunked = True;
             }
         }
     }
     
     : NewLine;
     
-    body: Body(self.content_length) if (self.has_body && self.has_content_length);
+    body: Body(self.content_length) if (self.has_body && self.has_content_length && !self.is_chunked);
+    chunked_body: ChunkedBody() if (self.has_body && self.is_chunked);
     
     var has_body: bool = False;
     var has_content_length: bool = False;
+    var is_chunked: bool = False;
     var content_length: uint64 = 0;
     
     on %done {
@@ -70,10 +74,13 @@ type Header = unit {
     : NewLine;
     
     var content_length: uint64 &optional;
+    var is_chunked: bool = False;
     
     on value {
         if (self.name.upper() == b"CONTENT-LENGTH")
             self.content_length = self.value.strip().to_uint();
+	if (self.name.upper() == b"TRANSFER-ENCODING" && b"chunked" in self.value.strip().lower() == True)
+            self.is_chunked = True;
     }
     
     on %done {
@@ -85,11 +92,54 @@ type Body = unit(length: uint64) {
     content: bytes &size=length;
     
     on %init {
-        print "Processing HTTP request body with length: %d"% length;
+        print "Processing HTTP request body with length: %d" % length;
     }
     
     on %done {
         print "Body content: %s" % self.content;
+    }
+};
+
+type Chunk = unit {
+    size: /[0-9a-fA-F]+/ &convert=$$.to_uint(16);
+    : /[^\r\n]*/;
+    : NewLine;
+    
+    data: bytes &size=self.size if (self.size > 0);
+    
+    : NewLine if (self.size > 0);
+    
+    on %done {
+        if (self.size > 0)
+            print "Chunk size: %d bytes" % self.size;
+    }
+};
+
+type ChunkedBody = unit {
+    chunks: Chunk[] &until=$$.size == 0;
+
+    trailers: Header[];
+    : NewLine;
+
+    var total_size: uint64 = 0;
+    var body_content: bytes = b"";
+
+    on chunks foreach {
+        if ($$.size > 0) {
+            self.total_size += $$.size;
+            self.body_content += $$.data;
+        }
+    }
+
+    on trailers {
+	for (h in self.trailers)
+	    print "Trailer: %s: %s" % (h.name, h.value);
+    }
+
+    
+    on %done {
+        print "Total chunked body size: %d bytes" % self.total_size;
+        print "Chunked body content: %s" % self.body_content;
     }
 };
 
@@ -112,20 +162,26 @@ type Response = unit {
             if (h?.content_length) {
                 self.content_length = h.content_length;
                 self.has_content_length = True;
-                break;
+            }
+            if (h?.is_chunked) {
+                self.is_chunked = True;
             }
         }
     }
     
     end_of_headers: NewLine;
     
-    body: bytes &size=self.content_length if (self.has_body && self.has_content_length);
+    body: bytes &size=self.content_length if (self.has_body && self.has_content_length && !self.is_chunked);
+    chunked_body: ChunkedBody() if (self.has_body && self.is_chunked);
+    
     on body {
-        print "Response body: %s" % self.body;
+        if (!self.is_chunked)
+            print "Response body: %s" % self.body;
     }
     
     var has_body: bool = True;
     var has_content_length: bool = False;
+    var is_chunked: bool = False;
     var content_length: uint64 = 0;
 };
 
